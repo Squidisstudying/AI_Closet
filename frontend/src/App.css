@@ -1,0 +1,350 @@
+/* ===== Home: full-bleed hero ===== */
+.home {
+  min-height: 100vh;
+  background-image: url("/BG.JPG"); /* 你 repo 裡有 public/BG.JPG，就用這個 */
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  color: #fff;
+}
+
+.home::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.homeInner {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== Shared layout ===== */
+.shell {
+  min-height: 100vh;
+  background: #fff;
+  color: #4a2c1d;
+  font-family: Inter, sans-serif;
+}
+
+.container {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 28px 18px 60px 18px;
+}
+
+/* ===== Navbar (shared) ===== */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 40px;
+}
+
+.brand {
+  font-family: "Playfair Display", serif;
+  font-size: 22px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.navMenu {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.navBtn {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+  padding: 8px 10px;
+  opacity: 0.92;
+  border-radius: 10px;
+  transition: opacity 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.navBtn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+/* Light navbar hover (白底頁面) */
+.navbarLight .navBtn:hover {
+  background: rgba(74, 44, 29, 0.08);
+}
+
+/* ===== Hero content ===== */
+.heroContent {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 40px 60px 40px;
+}
+
+.heroBox {
+  max-width: 740px;
+}
+
+.heroTitle {
+  font-family: "Playfair Display", serif;
+  font-size: 56px;
+  margin: 0 0 10px 0;
+  line-height: 1.05;
+  text-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+.heroSubtitle {
+  font-family: Inter, sans-serif;
+  font-size: 16px;
+  margin: 0 0 28px 0;
+  opacity: 0.92;
+  max-width: 560px;
+  text-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+.heroActions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.heroCardBtn {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.65);
+  color: #fff;
+  padding: 14px 18px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: Inter, sans-serif;
+  font-size: 15px;
+  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  backdrop-filter: blur(6px);
+}
+
+.heroCardBtn:hover {
+  background: rgba(255,255,255,0.20);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(0,0,0,0.18);
+}
+
+/* ===== Page typography ===== */
+.pageTitle {
+  font-family: "Playfair Display", serif;
+  font-size: 34px;
+  margin: 10px 0 6px 0;
+}
+
+.pageSubtitle {
+  margin: 0 0 18px 0;
+  opacity: 0.85;
+}
+
+/* ===== Buttons ===== */
+.btn {
+  border-radius: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.btnPrimary {
+  border: 1px solid #4a2c1d;
+  background: #4a2c1d;
+  color: #fff;
+}
+
+.btnPrimary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.10);
+}
+
+.btnGhost {
+  border: 1px solid #4a2c1d;
+  background: #fff;
+  color: #4a2c1d;
+}
+
+.btnGhost:hover {
+  background: rgba(74, 44, 29, 0.06);
+  transform: translateY(-1px);
+}
+
+/* ===== Market: grid cards ===== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0 16px 0;
+  flex-wrap: wrap;
+}
+
+.grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
+.card {
+  border: 1px solid rgba(74, 44, 29, 0.25);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(0,0,0,0.10);
+}
+
+.cardImg {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  display: block;
+  background: #f4f2ef;
+}
+
+.cardBody {
+  padding: 12px 12px 14px 12px;
+}
+
+.cardTopRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-weight: 600;
+}
+
+.badge {
+  border: 1px solid rgba(74, 44, 29, 0.35);
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  opacity: 0.9;
+  white-space: nowrap;
+}
+
+.meta {
+  margin-top: 8px;
+  font-size: 13px;
+  opacity: 0.85;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.priceRow {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.price {
+  font-weight: 700;
+}
+
+/* ===== Modal (上架表單) ===== */
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 50;
+}
+
+.modal {
+  width: 100%;
+  max-width: 560px;
+  background: #fff;
+  color: #4a2c1d;
+  border-radius: 18px;
+  border: 1px solid rgba(74, 44, 29, 0.25);
+  box-shadow: 0 22px 60px rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+
+.modalHead {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(74, 44, 29, 0.15);
+}
+
+.modalTitle {
+  margin: 0;
+  font-family: "Playfair Display", serif;
+  font-size: 20px;
+}
+
+.modalBody {
+  padding: 14px 16px 16px 16px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 560px) {
+  .formGrid { grid-template-columns: 1fr; }
+}
+
+.field label {
+  display: block;
+  font-size: 12px;
+  opacity: 0.85;
+  margin-bottom: 6px;
+}
+
+.field input, .field select {
+  width: 100%;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(74, 44, 29, 0.25);
+  outline: none;
+}
+
+.field input:focus, .field select:focus {
+  border-color: rgba(74, 44, 29, 0.55);
+}
+
+.modalFoot {
+  padding: 12px 16px 16px 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
