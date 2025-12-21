@@ -1,141 +1,226 @@
 import requests
-import re
+from bs4 import BeautifulSoup
 import json
 import time
+import re
 
-# =========================
-# 1. 設定區
-# =========================
+# ==================================================
+# 1. 基本設定（測試版）
+# ==================================================
 
-SUBREDDITS = [
-    "malefashionadvice",
-    "femalefashionadvice"
-]
-
-POST_LIMIT = 500  # 每個 subreddit 抓幾篇
+BASE_URL = "https://wear.jp"
+START_PAGE = 1
+END_PAGE = 80
+MAX_OUTFITS_PER_PAGE = 25
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Coding101 Outfit Project)"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) OutfitResearchBot/1.0",
+    "Accept": "text/html"
 }
 
-# =========================
-# 2. 衣物與顏色詞典
-# =========================
+OUTPUT_FILE = "wear_outfit_pairs_color_separated_test.json"
 
-CLOTHING = {
-    "top": [
-        "t-shirt", "tee", "shirt", "blouse",
-        "hoodie", "sweater", "knit", "polo"
-    ],
-    "bottom": [
-        "jeans", "pants", "trousers",
-        "slacks", "skirt", "shorts"
-    ],
-    "outer": [
-        "jacket", "coat", "blazer",
-        "cardigan", "denim jacket"
-    ],
-    "shoes": [
-        "sneakers", "shoes", "boots",
-        "loafers", "converse"
-    ]
+# ==================================================
+# 2. 上衣 / 下裝 類型
+# ==================================================
+
+TOP_KEYWORDS = {
+    "t-shirt": ["tシャツ", "t-shirt", "tee"],
+    "shirt": ["シャツ", "shirt"],
+    "hoodie": ["パーカー", "hoodie"],
+    "sweater": ["ニット", "sweater"],
+    "blouse": ["ブラウス", "blouse"]
 }
 
-COLORS = [
-    "white", "black", "blue", "gray", "grey",
-    "beige", "brown", "navy", "green", "red"
-]
+BOTTOM_KEYWORDS = {
+    "jeans": ["デニム", "jeans"],
+    "wide pants": ["ワイドパンツ", "ワイド"],
+    "slim pants": ["スリムパンツ", "スリム"],
+    "flare pants": ["フレアパンツ", "フレア"],
+    "pants": ["パンツ"]
+}
 
-# =========================
-# 3. 穿搭文字解析器
-# =========================
+# ==================================================
+# 3. 細顏色（日文 → 英文）
+# ==================================================
 
-def parse_outfit_text(text: str):
-    text = text.lower()
+JP_COLORS_FINE = {
+    "black": ["黒", "ブラック"],
+    "white": ["白", "ホワイト"],
+    "gray": ["グレー"],
+    "light blue": ["ライトブルー"],
+    "blue": ["青", "ブルー"],
+    "navy": ["ネイビー"],
+    "beige": ["ベージュ"],
+    "brown": ["ブラウン", "茶"],
+    "green": ["グリーン", "緑"],
+    "red": ["レッド", "赤"]
+}
 
-    result = {
-        "top": None,
-        "bottom": None,
-        "outer": None,
-        "shoes": None,
-        "colors": set()
-    }
+# ==================================================
+# 4. 基礎抽取工具
+# ==================================================
 
-    for color in COLORS:
-        if re.search(rf"\b{color}\b", text):
-            result["colors"].add(color)
+def extract_gender(text):
+    if any(k in text for k in ["レディース", "women", "女性"]):
+        return "female"
+    if any(k in text for k in ["メンズ", "men", "男性"]):
+        return "male"
+    return None
 
-    for category, keywords in CLOTHING.items():
-        for kw in keywords:
-            if re.search(rf"\b{kw}\b", text):
-                result[category] = kw
-                break
 
-    result["colors"] = list(result["colors"])
-    return result
+def find_positions(text, keywords):
+    positions = []
+    for kw in keywords:
+        for m in re.finditer(kw, text):
+            positions.append(m.start())
+    return positions
 
-# =========================
-# 4. 判斷是不是「像穿搭描述」
-# =========================
 
-def looks_like_outfit(text: str) -> bool:
-    keywords = [
-        "jeans", "shirt", "t-shirt", "pants",
-        "jacket", "wearing", "outfit"
-    ]
-    text = text.lower()
-    return any(k in text for k in keywords)
+def find_color_positions(text):
+    results = []
+    for color, kws in JP_COLORS_FINE.items():
+        for kw in kws:
+            for m in re.finditer(kw, text):
+                results.append((color, m.start()))
+    return results
 
-# =========================
-# 5. 爬 Reddit 貼文
-# =========================
+# ==================================================
+# 5. 顏色分配（核心！）
+# ==================================================
 
-def crawl_subreddit(subreddit: str, limit=50):
-    url = f"https://www.reddit.com/r/{subreddit}/top.json?t=year&limit={limit}"
-    r = requests.get(url, headers=HEADERS, timeout=10)
+def assign_color(item_positions, color_positions):
+    if not item_positions or not color_positions:
+        return None
+
+    min_dist = float("inf")
+    chosen_color = None
+
+    for item_pos in item_positions:
+        for color, color_pos in color_positions:
+            dist = abs(item_pos - color_pos)
+            if dist < min_dist:
+                min_dist = dist
+                chosen_color = color
+
+    return chosen_color
+
+# ==================================================
+# 6. 抓單一穿搭頁
+# ==================================================
+
+def crawl_outfit_page(url):
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=8)
+    except requests.exceptions.RequestException:
+        return None
 
     if r.status_code != 200:
-        print(f"Failed to fetch {subreddit}")
-        return []
+        return None
 
-    data = r.json()
-    posts = data["data"]["children"]
+    soup = BeautifulSoup(r.text, "html.parser")
+    text = soup.get_text(" ", strip=True).lower()
 
-    texts = []
-    for p in posts:
-        title = p["data"].get("title", "")
-        body = p["data"].get("selftext", "")
-        combined = f"{title}. {body}".strip()
-        if combined:
-            texts.append(combined)
+    gender = extract_gender(text)
 
-    return texts
+    top_type = None
+    bottom_type = None
+    top_positions = []
+    bottom_positions = []
 
-# =========================
-# 6. 主程式
-# =========================
+    for t, kws in TOP_KEYWORDS.items():
+        pos = find_positions(text, kws)
+        if pos:
+            top_type = t
+            top_positions = pos
+            break
+
+    for b, kws in BOTTOM_KEYWORDS.items():
+        pos = find_positions(text, kws)
+        if pos:
+            bottom_type = b
+            bottom_positions = pos
+            break
+
+    color_positions = find_color_positions(text)
+
+    top_color = assign_color(top_positions, color_positions)
+    bottom_color = assign_color(bottom_positions, color_positions)
+
+    if gender and top_type and bottom_type:
+        return {
+            "gender": gender,
+            "top": {
+                "type": top_type,
+                "color": top_color
+            },
+            "bottom": {
+                "type": bottom_type,
+                "color": bottom_color
+            }
+        }
+
+    return None
+
+# ==================================================
+# 7. 主爬蟲（五欄位完全相同才去重）
+# ==================================================
+
+def crawl_wear():
+    outfits = []
+    seen = set()
+
+    for page in range(START_PAGE, END_PAGE + 1):
+        print(f"\n→ Crawling WEAR page {page}")
+        r = requests.get(f"{BASE_URL}/coordinate/?pageno={page}", headers=HEADERS)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        links = []
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if href.startswith("/") and href.count("/") >= 2:
+                if any(x in href for x in ["shop", "search", "tag"]):
+                    continue
+                links.append(BASE_URL + href)
+
+        links = list(dict.fromkeys(links))[:MAX_OUTFITS_PER_PAGE]
+        print(f"  Found {len(links)} outfits")
+
+        for i, url in enumerate(links, 1):
+            print(f"    [{i}/{len(links)}] parsing")
+            outfit = crawl_outfit_page(url)
+            if not outfit:
+                continue
+
+            key = (
+                outfit["gender"],
+                outfit["top"]["type"],
+                outfit["top"]["color"],
+                outfit["bottom"]["type"],
+                outfit["bottom"]["color"]
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            outfits.append(outfit)
+            time.sleep(0.2)
+
+    return outfits
+
+# ==================================================
+# 8. 執行
+# ==================================================
 
 def main():
-    outfits = []
+    data = crawl_wear()
+    print(f"\nCollected {len(data)} unique outfit pairs")
 
-    for sub in SUBREDDITS:
-        print(f"Crawling r/{sub}...")
-        texts = crawl_subreddit(sub, POST_LIMIT)
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
-        for text in texts:
-            parsed = parse_outfit_text(text)
-
-            # 先放寬條件
-            if parsed["top"] or parsed["bottom"]:
-                outfits.append(parsed)
-
-    print(f"Collected {len(outfits)} outfits")
-
-    with open("outfits.json", "w", encoding="utf-8") as f:
-        json.dump(outfits, f, ensure_ascii=False, indent=2)
-
-    print("Saved to outfits.json")
-
+    print("Saved:", OUTPUT_FILE)
 
 if __name__ == "__main__":
     main()
