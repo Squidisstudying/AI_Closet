@@ -211,6 +211,7 @@
   overflow: hidden;
   background: #fff;
   transition: transform 160ms ease, box-shadow 160ms ease;
+  position: relative;
 }
 
 .card:hover {

@@ -437,14 +437,13 @@ function TodayPage({ go }) {
    demo 特色：
    - 商品卡片列表（items）
    - 支援「＋上架」打開 SellModal
-   - 支援「下架」把商品從列表移除
+   - 支援「Edit/Delete」把商品從列表移除
+   - + 留言區
    實務上之後可接：
    - 後端資料庫（商品由 API 取得）
    - 買家聯絡資訊 / 私訊 / 下單
 ====================== */
 function MarketPage({ go }) {
-  // useMemo：把 initial 假資料固定住，不要每次 re-render 都重新產生一份
-  //（不然如果未來你加更多狀態，會容易造成 items 被重置）
   const initial = useMemo(() => ([
     {
       id: 'a1',
@@ -455,6 +454,10 @@ function MarketPage({ go }) {
       image:
         'https://images.unsplash.com/photo-1520975682038-7d5b13e43a4a?auto=format&fit=crop&w=1200&q=60',
       tag: '熱門',
+      seller: 'Alice',            // ✅ 別人上架
+      comments: [
+        { id: 'cm1', author: 'Penny', text: '請問有實穿照嗎？', time: Date.now() - 1000 * 60 * 30 },
+      ],
     },
     {
       id: 'a2',
@@ -465,6 +468,8 @@ function MarketPage({ go }) {
       image:
         'https://images.unsplash.com/photo-1520975869018-5d3b2f5a3c30?auto=format&fit=crop&w=1200&q=60',
       tag: '推薦',
+      seller: 'You',              // ✅ 你上架（可 edit/delete）
+      comments: [],
     },
     {
       id: 'a3',
@@ -475,74 +480,121 @@ function MarketPage({ go }) {
       image:
         'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=1200&q=60',
       tag: '可議價',
+      seller: 'Bob',              // ✅ 別人上架
+      comments: [],
     },
   ]), [])
 
-  // items：目前畫面上的商品清單（demo 存在前端 state）
   const [items, setItems] = useState(initial)
 
-  // open：控制 SellModal 是否顯示
-  const [open, setOpen] = useState(false)
+  // 新增/編輯 Modal 控制
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState(null) // item or null
 
-  // 下架功能：用 filter 移除 id 對應商品
-  function removeItem(id) {
+  // 商品詳情（留言區）
+  const [selectedItem, setSelectedItem] = useState(null) // item or null
+
+  function addItem(newItem) {
+    setItems((prev) => [{ ...newItem, id: crypto.randomUUID(), seller: 'You', comments: [] }, ...prev])
+  }
+
+  function updateItem(id, patch) {
+    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  }
+
+  function deleteItem(id) {
+    const ok = confirm('確定要刪除（下架）這個商品嗎？')
+    if (!ok) return
     setItems((prev) => prev.filter((x) => x.id !== id))
   }
 
-  // 上架功能：把新商品插到最前面（新增後立刻看得到）
-  function addItem(newItem) {
-    setItems((prev) => [{ ...newItem, id: crypto.randomUUID() }, ...prev])
+  function addComment(productId, text) {
+    setItems((prev) =>
+      prev.map((p) => {
+        if (p.id !== productId) return p
+        const next = {
+          ...p,
+          comments: [
+            ...(p.comments || []),
+            { id: crypto.randomUUID(), author: 'You', text, time: Date.now() },
+          ],
+        }
+        return next
+      })
+    )
+
+    // 讓「詳情 modal」也同步顯示最新留言（因為 selectedItem 是舊物件）
+    setSelectedItem((cur) => {
+      if (!cur || cur.id !== productId) return cur
+      return {
+        ...cur,
+        comments: [
+          ...(cur.comments || []),
+          { id: crypto.randomUUID(), author: 'You', text, time: Date.now() },
+        ],
+      }
+    })
   }
 
   return (
     <Shell
       go={go}
       title="二手交易區"
-      subtitle="Demo：用卡片呈現二手商品，支援「＋上架」新增商品與「下架」。"
+      subtitle="Demo：支援上架、自己商品可編輯/刪除，別人商品可進入詳情留言。"
     >
-      {/* 工具列：回首頁 + 上架按鈕 */}
       <div className="toolbar">
         <button className="btn btnGhost" onClick={() => go('home')}>← 回主畫面</button>
-        <button className="btn btnPrimary" onClick={() => setOpen(true)}>＋ 上架</button>
+        <button
+          className="btn btnPrimary"
+          onClick={() => {
+            setEditingItem(null)
+            setModalOpen(true)
+          }}
+        >
+          ＋ 上架
+        </button>
       </div>
 
-      {/* 商品列表：grid 版面卡片 */}
       <div className="grid">
         {items.map((p) => (
-          <div className="card" key={p.id}>
-            <img className="cardImg" alt={p.title} src={p.image} />
-            <div className="cardBody">
-              <div className="cardTopRow">
-                <p className="cardTitle">{p.title}</p>
-                <span className="badge">{p.tag}</span>
-              </div>
-
-              {/* 商品資訊 */}
-              <div className="meta">
-                <span>尺寸：{p.size}</span>
-                <span>狀態：{p.condition}</span>
-              </div>
-
-              {/* 價格 + 下架 */}
-              <div className="priceRow">
-                <span className="price">NT$ {p.price}</span>
-                <button className="btn btnGhost" onClick={() => removeItem(p.id)}>
-                  下架
-                </button>
-              </div>
-            </div>
-          </div>
+          <ProductCard
+            key={p.id}
+            item={p}
+            isMine={p.seller === 'You'}
+            onOpen={() => setSelectedItem(p)}
+            onEdit={() => {
+              setEditingItem(p)
+              setModalOpen(true)
+            }}
+            onDelete={() => deleteItem(p.id)}
+          />
         ))}
       </div>
 
-      {/* 上架 Modal：open=true 才顯示 */}
-      {open && (
-        <SellModal
-          onClose={() => setOpen(false)}
+      {/* 新增/編輯共用 Modal */}
+      {modalOpen && (
+        <ProductModal
+          mode={editingItem ? 'edit' : 'add'}
+          initial={editingItem}
+          onClose={() => setModalOpen(false)}
           onSubmit={(data) => {
-            addItem(data)
-            setOpen(false)
+            if (editingItem) {
+              updateItem(editingItem.id, data)
+            } else {
+              addItem(data)
+            }
+            setModalOpen(false)
+            setEditingItem(null)
           }}
+        />
+      )}
+
+      {/* 商品詳情（留言區） */}
+      {selectedItem && (
+        <ProductDetailModal
+          item={selectedItem}
+          onClose={() => setSelectedItem(null)}
+          onAddComment={(text) => addComment(selectedItem.id, text)}
         />
       )}
     </Shell>
@@ -550,89 +602,114 @@ function MarketPage({ go }) {
 }
 
 /* ======================
-   SellModal（上架表單：支援上傳圖片 + 預覽）
-   - 主要用「上傳圖片」：使用者體驗更像真的二手平台
-   - 保留「圖片網址」：如果你想快速 demo 或沒準備照片
+   ProductCard：交易區卡片
+   - 自己的商品：顯示 Edit/Delete
+   - 別人的商品：顯示「查看/留言」
 ====================== */
-function SellModal({ onClose, onSubmit }) {
-  const [title, setTitle] = useState('')
-  const [price, setPrice] = useState(300)
-  const [size, setSize] = useState('M')
-  const [condition, setCondition] = useState('9成新')
-  const [tag, setTag] = useState('新上架')
+function ProductCard({ item, isMine, onOpen, onEdit, onDelete }) {
+  return (
+    <div className="card">
+      <img className="cardImg" alt={item.title} src={item.image} />
 
-  // ✅ 圖片：支援「上傳」與「URL」
-  const [imageUrl, setImageUrl] = useState(
-    'https://images.unsplash.com/photo-1520975947525-9a3f2e39e4e4?auto=format&fit=crop&w=1200&q=60'
+      {/* 右上角動作區 */}
+      <div className="cardActions">
+        {isMine ? (
+          <>
+            <button className="iconBtn" onClick={onEdit} title="編輯">Edit</button>
+            <button className="iconBtn danger" onClick={onDelete} title="刪除">Delete</button>
+          </>
+        ) : (
+          <button className="iconBtn" onClick={onOpen} title="查看與留言">View</button>
+        )}
+      </div>
+
+      <div className="cardBody">
+        <div className="cardTopRow">
+          <p className="cardTitle">{item.title}</p>
+          <span className="badge">{item.tag}</span>
+        </div>
+
+        <div className="meta">
+          <span>賣家：{item.seller}</span>
+          <span>尺寸：{item.size}</span>
+          <span>狀態：{item.condition}</span>
+          <span>留言：{(item.comments || []).length}</span>
+        </div>
+
+        <div className="priceRow">
+          <span className="price">NT$ {item.price}</span>
+          <button className="btn btnGhost" onClick={onOpen}>
+            {isMine ? '查看' : '查看 / 留言'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
-  const [preview, setPreview] = useState('') // 優先顯示上傳的預覽
+}
+
+/* ======================
+   ProductModal：上架/編輯共用表單（含上傳圖片預覽）
+====================== */
+function ProductModal({ mode, initial, onClose, onSubmit }) {
+  const isEdit = mode === 'edit'
+
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [price, setPrice] = useState(initial?.price ?? 300)
+  const [size, setSize] = useState(initial?.size ?? 'M')
+  const [condition, setCondition] = useState(initial?.condition ?? '9成新')
+  const [tag, setTag] = useState(initial?.tag ?? '新上架')
+
+  // 圖片：支援上傳與 URL（備用）
+  const [imageUrl, setImageUrl] = useState(initial?.image ?? '')
+  const [preview, setPreview] = useState(initial?.image ?? '')
   const [file, setFile] = useState(null)
 
   function handleFile(e) {
     const f = e.target.files?.[0]
     if (!f) return
     setFile(f)
-
-    // 產生本機預覽 URL（demo 用）
     const url = URL.createObjectURL(f)
     setPreview(url)
   }
 
-  // ✅ 避免記憶體洩漏：換圖或關閉 modal 時，把舊的 objectURL revoke 掉
   useEffect(() => {
     return () => {
       if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview)
     }
   }, [preview])
 
-  // 最終送出的 image：優先用上傳預覽（如果有），否則用 URL
   const finalImage = preview || imageUrl
 
   return (
     <div className="modalBackdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modalHead">
-          <h3 className="modalTitle">上架二手商品</h3>
+          <h3 className="modalTitle">{isEdit ? '編輯商品' : '上架二手商品'}</h3>
           <button className="btn btnGhost" onClick={onClose}>✕</button>
         </div>
 
         <div className="modalBody">
           <div className="formGrid">
-            {/* ✅ 上傳圖片（跨整行） */}
             <div className="field fieldFull">
               <label>上傳商品照片</label>
               <input type="file" accept="image/*" onChange={handleFile} />
-              {(preview || imageUrl) && (
-                <img className="previewImg" alt="preview" src={finalImage} />
-              )}
+              {finalImage && <img className="previewImg" alt="preview" src={finalImage} />}
             </div>
 
             <div className="field">
               <label>商品名稱</label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="例如：黑色針織上衣"
-              />
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="例如：黑色針織上衣" />
             </div>
 
             <div className="field">
               <label>價格（NT$）</label>
-              <input
-                type="number"
-                value={price}
-                onChange={(e) => setPrice(Number(e.target.value))}
-                min="0"
-              />
+              <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} min="0" />
             </div>
 
             <div className="field">
               <label>尺寸</label>
               <select value={size} onChange={(e) => setSize(e.target.value)}>
-                <option>S</option>
-                <option>M</option>
-                <option>L</option>
-                <option>XL</option>
+                <option>S</option><option>M</option><option>L</option><option>XL</option>
               </select>
             </div>
 
@@ -646,26 +723,14 @@ function SellModal({ onClose, onSubmit }) {
               </select>
             </div>
 
-            {/* ✅ 保留 URL 欄位：當你沒上傳圖片時，就會用這個 */}
             <div className="field fieldFull">
               <label>圖片網址（備用）</label>
-              <input
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="貼圖片網址（可選）"
-              />
-              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
-                有上傳圖片時會優先使用「上傳的照片」；沒上傳才會用這個網址。
-              </div>
+              <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="可留空" />
             </div>
 
             <div className="field fieldFull">
               <label>標籤</label>
-              <input
-                value={tag}
-                onChange={(e) => setTag(e.target.value)}
-                placeholder="例如：可議價/熱門/新上架"
-              />
+              <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="例如：可議價/熱門/新上架" />
             </div>
           </div>
         </div>
@@ -674,19 +739,110 @@ function SellModal({ onClose, onSubmit }) {
           <button className="btn btnGhost" onClick={onClose}>取消</button>
           <button
             className="btn btnPrimary"
-            onClick={() =>
-              onSubmit({
-                title: title || '未命名商品',
-                price,
-                size,
-                condition,
-                image: finalImage, // ✅ 這裡就會存到卡片用的 image
-                tag,
-              })
-            }
+            onClick={() => onSubmit({
+              title: title || '未命名商品',
+              price,
+              size,
+              condition,
+              image: finalImage,
+              tag,
+            })}
           >
-            確認上架
+            {isEdit ? '儲存修改' : '確認上架'}
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ======================
+   ProductDetailModal：商品詳情 + 留言區
+   - 點進去看商品資訊
+   - 留言列表 + 新增留言
+   注意：目前留言只存在前端 state（重整會消失）
+====================== */
+function ProductDetailModal({ item, onClose, onAddComment }) {
+  const [text, setText] = useState('')
+
+  function submit() {
+    const t = text.trim()
+    if (!t) return
+    onAddComment(t)
+    setText('')
+  }
+
+  return (
+    <div className="modalBackdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modalHead">
+          <h3 className="modalTitle">商品詳情</h3>
+          <button className="btn btnGhost" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="modalBody">
+          <img className="previewImg" alt={item.title} src={item.image} />
+
+          <div style={{ marginTop: 12 }}>
+            <div className="cardTopRow">
+              <p className="cardTitle" style={{ margin: 0 }}>{item.title}</p>
+              <span className="badge">{item.tag}</span>
+            </div>
+
+            <div className="meta" style={{ marginTop: 8 }}>
+              <span>賣家：{item.seller}</span>
+              <span>尺寸：{item.size}</span>
+              <span>狀態：{item.condition}</span>
+              <span className="price">NT$ {item.price}</span>
+            </div>
+          </div>
+
+          <hr style={{ margin: '16px 0', opacity: 0.2 }} />
+
+          {/* 留言區 */}
+          <div>
+            <h4 style={{ margin: '0 0 10px 0' }}>留言區</h4>
+
+            <div style={{ display: 'grid', gap: 10 }}>
+              {(item.comments || []).length === 0 ? (
+                <div style={{ opacity: 0.7, fontSize: 14 }}>目前還沒有留言。</div>
+              ) : (
+                (item.comments || []).map((c) => (
+                  <div
+                    key={c.id}
+                    style={{
+                      border: '1px solid rgba(74, 44, 29, 0.15)',
+                      borderRadius: 12,
+                      padding: 10,
+                      background: 'rgba(74,44,29,0.02)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                      <strong style={{ fontSize: 14 }}>{c.author}</strong>
+                      <span style={{ fontSize: 12, opacity: 0.65 }}>
+                        {new Date(c.time).toLocaleString()}
+                      </span>
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 14 }}>{c.text}</div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="toolbar" style={{ marginTop: 12 }}>
+              <input
+                style={{ flex: 1 }}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="輸入留言（例如：請問可小議嗎？）"
+              />
+              <button className="btn btnPrimary" onClick={submit}>送出</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="modalFoot">
+          <button className="btn btnGhost" onClick={onClose}>關閉</button>
         </div>
       </div>
     </div>
