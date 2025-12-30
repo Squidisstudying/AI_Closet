@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient.js'
+import Shell from './Shell.jsx'
 const CATEGORY_OPTIONS = [
   "t-shirt",
   "shirt",
@@ -299,26 +300,6 @@ function TopNav({ variant, go }) {
         <button className="navBtn" onClick={() => go('closet')}>我的衣櫃</button>
         <button className="navBtn" onClick={() => go('today')}>今日穿搭推薦</button>
         <button className="navBtn" onClick={() => go('market')}>二手交易區</button>
-      </div>
-    </div>
-  )
-}
-/* ======================
-   Page Shell（統一版型）
-   所有內頁（衣櫃/推薦/交易）都用同一個外框：
-   - 上方 TopNav(light)
-   - 內容 container
-   - title / subtitle / children
-====================== */
-function Shell({ go, title, subtitle, children }) {
-  return (
-    <div className="shell">
-      <TopNav variant="light" go={go} />
-      <div className="container">
-        <h1 className="pageTitle">{title}</h1>
-        <p className="pageSubtitle">{subtitle}</p>
-        {/* children = 每個頁面自己獨有的內容 */}
-        {children}
       </div>
     </div>
   )

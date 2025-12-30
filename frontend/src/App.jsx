@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient.js'
 
@@ -6,6 +6,7 @@ import MarketPage from './MarketPage.jsx'
 import ClosetPage from './ClosetPage.jsx'
 import TodayPage from './TodayPage.jsx'
 import AuthTest from './AuthTest.jsx'
+import Shell from './Shell.jsx'
 
 const CATEGORY_OPTIONS = [
   "t-shirt",
