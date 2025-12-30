@@ -1,123 +1,292 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabaseClient.js'
-import AddListing from './AddListing.jsx'
+// import AddListing from './AddListing.jsx' // 沒用到可先拿掉
 
-/* ======================
-   Market Page（二手交易區）
-   demo 特色：
-   - 商品卡片列表（items）
-   - 支援「＋上架」打開 SellModal
-   - 支援「Edit/Delete」把商品從列表移除
-   - + 留言區
-   實務上之後可接：
-   - 後端資料庫（商品由 API 取得）
-   - 買家聯絡資訊 / 私訊 / 下單
-====================== */
+const BUCKET = 'images' // 若你有 Supabase Storage bucket（可先不建）
+
+async function uploadMarketImage(file, userId) {
+  // 需要：Supabase Storage 建 bucket：images，且最好先設 public（demo 最快）
+  const ext = file.name.split('.').pop()
+  const path = `market/${userId}/${crypto.randomUUID()}.${ext}`
+
+  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false })
+  if (upErr) throw upErr
+
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
+  return data.publicUrl
+}
+
 export default function MarketPage({ go, user }) {
-  const initial = useMemo(() => ([
-    {
-      id: 'a1',
-      title: '黑色針織上衣',
-      size: 'M',
-      condition: '9成新',
-      price: 380,
-      image:
-        'https://images.unsplash.com/photo-1520975682038-7d5b13e43a4a?auto=format&fit=crop&w=1200&q=60',
-      tag: '熱門',
-      seller: 'Alice',            // ✅ 別人上架
-      comments: [
-        { id: 'cm1', author: 'Penny', text: '請問有實穿照嗎？', time: Date.now() - 1000 * 60 * 30 },
-      ],
-    },
-    {
-      id: 'a2',
-      title: '米白襯衫',
-      size: 'L',
-      condition: '近全新',
-      price: 520,
-      image:
-        'https://images.unsplash.com/photo-1520975869018-5d3b2f5a3c30?auto=format&fit=crop&w=1200&q=60',
-      tag: '推薦',
-      seller: 'You',              // ✅ 你上架（可 edit/delete）
-      comments: [],
-    },
-    {
-      id: 'a3',
-      title: '牛仔外套',
-      size: 'M',
-      condition: '8成新',
-      price: 650,
-      image:
-        'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=1200&q=60',
-      tag: '可議價',
-      seller: 'Bob',              // ✅ 別人上架
-      comments: [],
-    },
-  ]), [])
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
 
-  const [items, setItems] = useState(initial)
-
-  // 新增/編輯 Modal 控制
+  // 新增/編輯 modal
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingItem, setEditingItem] = useState(null) // item or null
+  const [editingId, setEditingId] = useState(null)
 
-  // 商品詳情（留言區）
-  const [selectedItem, setSelectedItem] = useState(null) // item or null
+  // 詳情/留言（用 id，避免 selectedItem 變舊）
+  const [selectedId, setSelectedId] = useState(null)
+  const selectedItem = useMemo(
+    () => items.find((x) => x.id === selectedId) || null,
+    [items, selectedId]
+  )
 
-  function addItem(newItem) {
-    setItems((prev) => [{ ...newItem, id: crypto.randomUUID(), seller: 'You', comments: [] }, ...prev])
+  // 留言狀態
+  const [comments, setComments] = useState([])
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [commentBusy, setCommentBusy] = useState(false)
+
+  // 搜尋（小加分，demo 很好用）
+  const [q, setQ] = useState('')
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase()
+    if (!s) return items
+    return items.filter((x) =>
+      (x.title || '').toLowerCase().includes(s) ||
+      (x.tag || '').toLowerCase().includes(s) ||
+      (x.size || '').toLowerCase().includes(s)
+    )
+  }, [items, q])
+
+  // ====== Listings CRUD ======
+  async function fetchListings() {
+    setLoading(true)
+    setError('')
+    const { data, error } = await supabase
+      .from('market_listings')
+      .select('id,title,price,size,condition,tag,image_url,seller_id,created_at')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      setError(error.message)
+      setItems([])
+      setLoading(false)
+      return
+    }
+
+    // 映射成你前端想用的格式（image/seller）
+    const mapped = (data || []).map((r) => ({
+      id: r.id,
+      title: r.title,
+      price: r.price,
+      size: r.size,
+      condition: r.condition,
+      tag: r.tag,
+      image: r.image_url,
+      seller_id: r.seller_id,
+      seller: r.seller_id === user?.id ? 'You' : (r.seller_id ? r.seller_id.slice(0, 6) : 'Unknown'),
+      created_at: r.created_at,
+    }))
+
+    setItems(mapped)
+    setLoading(false)
   }
 
-  function updateItem(id, patch) {
-    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  async function createListing(form) {
+    if (!user) return alert('請先登入才能上架')
+    setBusy(true)
+    setError('')
+
+    try {
+      // 圖片：有 file 就上傳到 Storage，否則用 imageUrl（網址）
+      let image_url = form.imageUrl || ''
+      if (form.file) image_url = await uploadMarketImage(form.file, user.id)
+
+      const { error } = await supabase.from('market_listings').insert({
+        seller_id: user.id,
+        title: form.title || '未命名商品',
+        price: Number(form.price) || 0,
+        size: form.size || 'M',
+        condition: form.condition || '9成新',
+        tag: form.tag || '新上架',
+        image_url,
+      })
+      if (error) throw error
+
+      await fetchListings()
+    } catch (e) {
+      setError(e.message || String(e))
+    } finally {
+      setBusy(false)
+    }
   }
 
-  function deleteItem(id) {
+  async function updateListing(id, form) {
+    if (!user) return alert('請先登入才能編輯')
+    setBusy(true)
+    setError('')
+
+    try {
+      let image_url = form.imageUrl || ''
+      if (form.file) image_url = await uploadMarketImage(form.file, user.id)
+
+      const { error } = await supabase
+        .from('market_listings')
+        .update({
+          title: form.title || '未命名商品',
+          price: Number(form.price) || 0,
+          size: form.size || 'M',
+          condition: form.condition || '9成新',
+          tag: form.tag || '新上架',
+          image_url,
+        })
+        .eq('id', id)
+        .eq('seller_id', user.id) // ✅ 防止改到別人的
+
+      if (error) throw error
+
+      await fetchListings()
+    } catch (e) {
+      setError(e.message || String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function deleteListing(id) {
+    if (!user) return alert('請先登入')
     const ok = confirm('確定要刪除（下架）這個商品嗎？')
     if (!ok) return
-    setItems((prev) => prev.filter((x) => x.id !== id))
+
+    setBusy(true)
+    setError('')
+    try {
+      const { error } = await supabase
+        .from('market_listings')
+        .delete()
+        .eq('id', id)
+        .eq('seller_id', user.id)
+
+      if (error) throw error
+
+      // 若正在看這個商品詳情，順便關掉
+      if (selectedId === id) setSelectedId(null)
+      await fetchListings()
+    } catch (e) {
+      setError(e.message || String(e))
+    } finally {
+      setBusy(false)
+    }
   }
 
-  function addComment(productId, text) {
-    setItems((prev) =>
-      prev.map((p) => {
-        if (p.id !== productId) return p
-        const next = {
-          ...p,
-          comments: [
-            ...(p.comments || []),
-            { id: crypto.randomUUID(), author: 'You', text, time: Date.now() },
-          ],
-        }
-        return next
+  // ====== Comments ======
+  async function fetchComments(listingId) {
+    if (!listingId) return
+    setCommentsLoading(true)
+    const { data, error } = await supabase
+      .from('comments')
+      .select('id,text,created_at,author_id')
+      .eq('listing_id', listingId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      setComments([])
+      setCommentsLoading(false)
+      return
+    }
+
+    setComments((data || []).map((c) => ({
+      id: c.id,
+      text: c.text,
+      time: c.created_at,
+      author_id: c.author_id,
+      author: c.author_id === user?.id ? 'You' : (c.author_id ? c.author_id.slice(0, 6) : 'Unknown'),
+    })))
+    setCommentsLoading(false)
+  }
+
+  async function addComment(listingId, text) {
+    if (!user) return alert('請先登入才能留言')
+    const t = text.trim()
+    if (!t) return
+
+    setCommentBusy(true)
+    try {
+      const { error } = await supabase.from('comments').insert({
+        listing_id: listingId,
+        author_id: user.id,
+        text: t,
       })
-    )
+      if (error) throw error
 
-    // 讓「詳情 modal」也同步顯示最新留言（因為 selectedItem 是舊物件）
-    setSelectedItem((cur) => {
-      if (!cur || cur.id !== productId) return cur
-      return {
-        ...cur,
-        comments: [
-          ...(cur.comments || []),
-          { id: crypto.randomUUID(), author: 'You', text, time: Date.now() },
-        ],
-      }
-    })
+      await fetchComments(listingId)
+    } catch (e) {
+      alert(e.message || String(e))
+    } finally {
+      setCommentBusy(false)
+    }
   }
+
+  async function deleteComment(commentId) {
+    if (!user) return
+    const ok = confirm('刪除這則留言？')
+    if (!ok) return
+
+    setCommentBusy(true)
+    try {
+      // 只刪自己的留言（也要搭配 DB RLS）
+      const { error } = await supabase
+        .from('comments')
+        .delete()
+        .eq('id', commentId)
+        .eq('author_id', user.id)
+
+      if (error) throw error
+
+      await fetchComments(selectedId)
+    } catch (e) {
+      alert(e.message || String(e))
+    } finally {
+      setCommentBusy(false)
+    }
+  }
+
+  // 初次載入 listings
+  useEffect(() => {
+    fetchListings()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 打開商品詳情時載入留言
+  useEffect(() => {
+    if (!selectedId) return
+    fetchComments(selectedId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId])
+
+  // ====== UI ======
+  const editingItem = useMemo(
+    () => items.find((x) => x.id === editingId) || null,
+    [items, editingId]
+  )
 
   return (
     <Shell
       go={go}
       title="二手交易區"
-      subtitle="Demo：支援上架、自己商品可編輯/刪除，別人商品可進入詳情留言。"
+      subtitle="正式版：資料從 Supabase 讀寫，上架/編輯/刪除/留言都會保存。"
     >
-      <div className="toolbar">
+      <div className="toolbar" style={{ gap: 10, flexWrap: 'wrap' }}>
         <button className="btn btnGhost" onClick={() => go('home')}>← 回主畫面</button>
+
+        <input
+          style={{ flex: 1, minWidth: 220 }}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="搜尋商品（title/tag/size）"
+        />
+
+        <button className="btn btnGhost" onClick={fetchListings} disabled={loading || busy}>
+          重新整理
+        </button>
+
         <button
           className="btn btnPrimary"
+          disabled={!user || busy}
           onClick={() => {
-            setEditingItem(null)
+            setEditingId(null)
             setModalOpen(true)
           }}
         >
@@ -125,36 +294,47 @@ export default function MarketPage({ go, user }) {
         </button>
       </div>
 
-      <div className="grid">
-        {items.map((p) => (
-          <ProductCard
-            key={p.id}
-            item={p}
-            isMine={p.seller === 'You'}
-            onOpen={() => setSelectedItem(p)}
-            onEdit={() => {
-              setEditingItem(p)
-              setModalOpen(true)
-            }}
-            onDelete={() => deleteItem(p.id)}
-          />
-        ))}
-      </div>
+      {error && (
+        <div style={{ marginTop: 10, padding: 10, border: '1px solid rgba(139,46,46,.35)', borderRadius: 12 }}>
+          <strong style={{ color: '#8b2e2e' }}>Error：</strong> {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ marginTop: 16, opacity: 0.75 }}>載入中...</div>
+      ) : (
+        <div className="grid" style={{ marginTop: 14 }}>
+          {filtered.map((p) => (
+            <ProductCard
+              key={p.id}
+              item={p}
+              isMine={p.seller_id === user?.id}
+              onOpen={() => setSelectedId(p.id)}
+              onEdit={() => {
+                setEditingId(p.id)
+                setModalOpen(true)
+              }}
+              onDelete={() => deleteListing(p.id)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* 新增/編輯共用 Modal */}
       {modalOpen && (
         <ProductModal
           mode={editingItem ? 'edit' : 'add'}
           initial={editingItem}
-          onClose={() => setModalOpen(false)}
-          onSubmit={(data) => {
-            if (editingItem) {
-              updateItem(editingItem.id, data)
-            } else {
-              addItem(data)
-            }
+          onClose={() => {
             setModalOpen(false)
-            setEditingItem(null)
+            setEditingId(null)
+          }}
+          onSubmit={async (form) => {
+            if (editingItem) await updateListing(editingItem.id, form)
+            else await createListing(form)
+
+            setModalOpen(false)
+            setEditingId(null)
           }}
         />
       )}
@@ -163,8 +343,13 @@ export default function MarketPage({ go, user }) {
       {selectedItem && (
         <ProductDetailModal
           item={selectedItem}
-          onClose={() => setSelectedItem(null)}
+          user={user}
+          comments={comments}
+          loading={commentsLoading}
+          busy={commentBusy}
+          onClose={() => setSelectedId(null)}
           onAddComment={(text) => addComment(selectedItem.id, text)}
+          onDeleteComment={deleteComment}
         />
       )}
     </Shell>
@@ -173,23 +358,19 @@ export default function MarketPage({ go, user }) {
 
 /* ======================
    ProductCard：交易區卡片
-   - 自己的商品：顯示 Edit/Delete
-   - 別人的商品：顯示「查看/留言」
 ====================== */
 function ProductCard({ item, isMine, onOpen, onEdit, onDelete }) {
   return (
     <div className="card">
       <img className="cardImg" alt={item.title} src={item.image} />
 
-      {/* 右上角動作區 */}
       <div className="cardActions">
-        {isMine ? (
+        <button className="iconBtn" onClick={onOpen} title="查看">View</button>
+        {isMine && (
           <>
             <button className="iconBtn" onClick={onEdit} title="編輯">Edit</button>
             <button className="iconBtn danger" onClick={onDelete} title="刪除">Delete</button>
           </>
-        ) : (
-          <button className="iconBtn" onClick={onOpen} title="查看與留言">View</button>
         )}
       </div>
 
@@ -203,13 +384,12 @@ function ProductCard({ item, isMine, onOpen, onEdit, onDelete }) {
           <span>賣家：{item.seller}</span>
           <span>尺寸：{item.size}</span>
           <span>狀態：{item.condition}</span>
-          <span>留言：{(item.comments || []).length}</span>
         </div>
 
         <div className="priceRow">
           <span className="price">NT$ {item.price}</span>
           <button className="btn btnGhost" onClick={onOpen}>
-            {isMine ? '查看' : '查看 / 留言'}
+            查看 / 留言
           </button>
         </div>
       </div>
@@ -218,7 +398,9 @@ function ProductCard({ item, isMine, onOpen, onEdit, onDelete }) {
 }
 
 /* ======================
-   ProductModal：上架/編輯共用表單（含上傳圖片預覽）
+   ProductModal：上架/編輯表單
+   - onSubmit 回傳：{title, price, size, condition, tag, imageUrl, file}
+   - 注意：不要把 blob: preview 當成永久圖片存進 DB
 ====================== */
 function ProductModal({ mode, initial, onClose, onSubmit }) {
   const isEdit = mode === 'edit'
@@ -229,9 +411,8 @@ function ProductModal({ mode, initial, onClose, onSubmit }) {
   const [condition, setCondition] = useState(initial?.condition ?? '9成新')
   const [tag, setTag] = useState(initial?.tag ?? '新上架')
 
-  // 圖片：支援上傳與 URL（備用）
   const [imageUrl, setImageUrl] = useState(initial?.image ?? '')
-  const [preview, setPreview] = useState(initial?.image ?? '')
+  const [preview, setPreview] = useState('')
   const [file, setFile] = useState(null)
 
   function handleFile(e) {
@@ -248,7 +429,7 @@ function ProductModal({ mode, initial, onClose, onSubmit }) {
     }
   }, [preview])
 
-  const finalImage = preview || imageUrl
+  const previewSrc = preview || imageUrl
 
   return (
     <div className="modalBackdrop" onClick={onClose}>
@@ -261,9 +442,9 @@ function ProductModal({ mode, initial, onClose, onSubmit }) {
         <div className="modalBody">
           <div className="formGrid">
             <div className="field fieldFull">
-              <label>上傳商品照片</label>
+              <label>上傳商品照片（可選）</label>
               <input type="file" accept="image/*" onChange={handleFile} />
-              {finalImage && <img className="previewImg" alt="preview" src={finalImage} />}
+              {previewSrc && <img className="previewImg" alt="preview" src={previewSrc} />}
             </div>
 
             <div className="field">
@@ -310,12 +491,13 @@ function ProductModal({ mode, initial, onClose, onSubmit }) {
           <button
             className="btn btnPrimary"
             onClick={() => onSubmit({
-              title: title || '未命名商品',
+              title,
               price,
               size,
               condition,
-              image: finalImage,
               tag,
+              imageUrl, // ✅ 永久 URL（或空）
+              file,     // ✅ 若有選檔，就交給父層上傳到 Storage
             })}
           >
             {isEdit ? '儲存修改' : '確認上架'}
@@ -327,12 +509,9 @@ function ProductModal({ mode, initial, onClose, onSubmit }) {
 }
 
 /* ======================
-   ProductDetailModal：商品詳情 + 留言區
-   - 點進去看商品資訊
-   - 留言列表 + 新增留言
-   注意：目前留言只存在前端 state（重整會消失）
+   ProductDetailModal：商品詳情 + 留言區（Supabase 版）
 ====================== */
-function ProductDetailModal({ item, onClose, onAddComment }) {
+function ProductDetailModal({ item, user, comments, loading, busy, onClose, onAddComment, onDeleteComment }) {
   const [text, setText] = useState('')
 
   function submit() {
@@ -369,44 +548,59 @@ function ProductDetailModal({ item, onClose, onAddComment }) {
 
           <hr style={{ margin: '16px 0', opacity: 0.2 }} />
 
-          {/* 留言區 */}
           <div>
             <h4 style={{ margin: '0 0 10px 0' }}>留言區</h4>
 
-            <div style={{ display: 'grid', gap: 10 }}>
-              {(item.comments || []).length === 0 ? (
-                <div style={{ opacity: 0.7, fontSize: 14 }}>目前還沒有留言。</div>
-              ) : (
-                (item.comments || []).map((c) => (
-                  <div
-                    key={c.id}
-                    style={{
-                      border: '1px solid rgba(74, 44, 29, 0.15)',
-                      borderRadius: 12,
-                      padding: 10,
-                      background: 'rgba(74,44,29,0.02)'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                      <strong style={{ fontSize: 14 }}>{c.author}</strong>
-                      <span style={{ fontSize: 12, opacity: 0.65 }}>
-                        {new Date(c.time).toLocaleString()}
-                      </span>
+            {loading ? (
+              <div style={{ opacity: 0.7 }}>載入留言中...</div>
+            ) : (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {comments.length === 0 ? (
+                  <div style={{ opacity: 0.7, fontSize: 14 }}>目前還沒有留言。</div>
+                ) : (
+                  comments.map((c) => (
+                    <div
+                      key={c.id}
+                      style={{
+                        border: '1px solid rgba(74, 44, 29, 0.15)',
+                        borderRadius: 12,
+                        padding: 10,
+                        background: 'rgba(74,44,29,0.02)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                        <strong style={{ fontSize: 14 }}>{c.author}</strong>
+                        <span style={{ fontSize: 12, opacity: 0.65 }}>
+                          {new Date(c.time).toLocaleString()}
+                        </span>
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 14 }}>{c.text}</div>
+
+                      {/* 只讓自己刪自己的留言（也要 DB RLS 配合） */}
+                      {user?.id && c.author_id === user.id && (
+                        <div style={{ marginTop: 8 }}>
+                          <button className="btn btnGhost" disabled={busy} onClick={() => onDeleteComment(c.id)}>
+                            刪除留言
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div style={{ marginTop: 6, fontSize: 14 }}>{c.text}</div>
-                  </div>
-                ))
-              )}
-            </div>
+                  ))
+                )}
+              </div>
+            )}
 
             <div className="toolbar" style={{ marginTop: 12 }}>
               <input
                 style={{ flex: 1 }}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="輸入留言（例如：請問可小議嗎？）"
+                placeholder={user ? "輸入留言（例如：請問可小議嗎？）" : "請先登入才能留言"}
+                disabled={!user || busy}
               />
-              <button className="btn btnPrimary" onClick={submit}>送出</button>
+              <button className="btn btnPrimary" onClick={submit} disabled={!user || busy}>
+                送出
+              </button>
             </div>
           </div>
         </div>
@@ -418,53 +612,3 @@ function ProductDetailModal({ item, onClose, onAddComment }) {
     </div>
   )
 }
-
-
-/* ======================
-   Shared Navbar（共用導覽列）
-   - variant: 'dark' or 'light' 用來決定顏色/樣式
-   - go: setPage，點按鈕可切換頁面
-====================== */
-function TopNav({ variant, go }) {
-  const isLight = variant === 'light'
-  return (
-    <div
-      className={`navbar ${isLight ? 'navbarLight' : ''}`}
-      style={{ color: isLight ? '#4a2c1d' : '#fff' }}
-    >
-      {/* 點品牌文字回首頁 */}
-      <div className="brand" onClick={() => go('home')}>
-        My Style Closet
-      </div>
-
-      {/* 三個導覽按鈕：切換頁面 */}
-      <div className="navMenu">
-        <button className="navBtn" onClick={() => go('closet')}>我的衣櫃</button>
-        <button className="navBtn" onClick={() => go('today')}>今日穿搭推薦</button>
-        <button className="navBtn" onClick={() => go('market')}>二手交易區</button>
-      </div>
-    </div>
-  )
-}
-/* ======================
-   Page Shell（統一版型）
-   所有內頁（衣櫃/推薦/交易）都用同一個外框：
-   - 上方 TopNav(light)
-   - 內容 container
-   - title / subtitle / children
-====================== */
-function Shell({ go, title, subtitle, children }) {
-  return (
-    <div className="shell">
-      <TopNav variant="light" go={go} />
-      <div className="container">
-        <h1 className="pageTitle">{title}</h1>
-        <p className="pageSubtitle">{subtitle}</p>
-        {/* children = 每個頁面自己獨有的內容 */}
-        {children}
-      </div>
-    </div>
-  )
-}
-
-
