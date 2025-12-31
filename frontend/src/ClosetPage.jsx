@@ -64,7 +64,7 @@ async function uploadClosetImage(file, userId) {
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
   return { publicUrl: data.publicUrl, path }
 }
-
+// main closetpage
 export default function ClosetPage({ go, user }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -73,12 +73,37 @@ export default function ClosetPage({ go, user }) {
 
   const [addingOpen, setAddingOpen] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
-  // 篩選 / 排序
+  // 篩選state
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('all')
   const [col, setCol] = useState('all')
   const [sort, setSort] = useState('newest') // newest | wornDesc | wornAsc | titleAsc
+  // visibleItems useMemo
+  const visibleItems = useMemo(() => {
+    const keyword = q.trim().toLowerCase()
 
+    let arr = items.filter((it) => {
+      const okQ =
+        !keyword ||
+        (it.title || '').toLowerCase().includes(keyword)
+
+      const okCat = cat === 'all' || it.category === cat
+      const okCol = col === 'all' || it.color === col
+
+      return okQ && okCat && okCol
+    })
+
+    // 排序
+    arr = [...arr].sort((a, b) => {
+      if (sort === 'wornDesc') return (b.worn || 0) - (a.worn || 0)
+      if (sort === 'wornAsc') return (a.worn || 0) - (b.worn || 0)
+      if (sort === 'titleAsc') return (a.title || '').localeCompare(b.title || '')
+      // newest (預設)
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0)
+    })
+
+    return arr
+  }, [items, q, cat, col, sort])
 
   // 進頁面先從 Supabase 把衣服抓回來
   useEffect(() => {
@@ -454,28 +479,4 @@ function ClosetModal({ mode, initial, onClose, onSubmit }) {
   )
 }
 
-  const visibleItems = useMemo(() => {
-    const keyword = q.trim().toLowerCase()
 
-    let arr = items.filter((it) => {
-      const okQ =
-        !keyword ||
-        (it.title || '').toLowerCase().includes(keyword)
-
-      const okCat = cat === 'all' || it.category === cat
-      const okCol = col === 'all' || it.color === col
-
-      return okQ && okCat && okCol
-    })
-
-    // 排序
-    arr = [...arr].sort((a, b) => {
-      if (sort === 'wornDesc') return (b.worn || 0) - (a.worn || 0)
-      if (sort === 'wornAsc') return (a.worn || 0) - (b.worn || 0)
-      if (sort === 'titleAsc') return (a.title || '').localeCompare(b.title || '')
-      // newest (預設)
-      return new Date(b.created_at || 0) - new Date(a.created_at || 0)
-    })
-
-    return arr
-  }, [items, q, cat, col, sort])
