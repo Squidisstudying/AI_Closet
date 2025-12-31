@@ -9,13 +9,15 @@ const CATEGORY_OPTIONS = [
   "shirt",
   "hoodie",
   "sweater",
-  "blouse",
+  "jacket",
   "jeans",
   "wide pants",
-  "slim pants",
-  "flare pants",
-  "pants",
-]
+  "pants", 
+  "dress",
+  "shorts",
+  "skirt",
+  "other"
+];
 
 // 把 DB row 轉成你卡片想用的格式
 function rowToItem(row) {

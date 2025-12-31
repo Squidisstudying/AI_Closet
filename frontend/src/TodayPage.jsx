@@ -5,12 +5,14 @@ const CATEGORY_OPTIONS = [
   "shirt",
   "hoodie",
   "sweater",
-  "blouse",
+  "jacket",
   "jeans",
   "wide pants",
-  "slim pants",
-  "flare pants",
-  "pants",
+  "pants", 
+  "dress",
+  "shorts",
+  "skirt",
+  "other"
 ];
 /* ======================
    Today Page（今日穿搭推薦）
