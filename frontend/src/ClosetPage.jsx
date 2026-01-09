@@ -246,51 +246,49 @@ export default function ClosetPage({ go, user }) {
       title="我的衣櫃"
       subtitle="上傳衣服照片、分類、顏色分析、穿著次數（已接 Supabase，重整不會消失）。"
     >
-      <div className="toolbar">
-        <button className="btn btnGhost" onClick={() => go('home')}>← 回主畫面</button>
-        <button className="btn btnPrimary" onClick={() => setAddingOpen(true)}>＋ 新增</button>
-      </div>
-      <div className="toolbar" style={{ gap: 10, flexWrap: 'wrap' }}>
+      <div className="filterBar">
         <input
-          style={{ flex: 1, minWidth: 180 }}
+          className="control"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="搜尋衣服名稱（例如：skirt）"
         />
 
-        <select value={cat} onChange={(e) => setCat(e.target.value)}>
-          <option value="all">All categories</option>
-          {CATEGORY_OPTIONS.map(opt => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
+        <div className="filterRight">
+          <select className="control" value={cat} onChange={(e) => setCat(e.target.value)}>
+            <option value="all">All categories</option>
+            {CATEGORY_OPTIONS.map(opt => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
 
-        <select value={col} onChange={(e) => setCol(e.target.value)}>
-          <option value="all">All colors</option>
-          {/* 這裡如果你有 COLOR_OPTIONS 就用那個；沒有就先這樣 */}
-          {["black","white","gray","navy","blue","light blue","dark blue","beige","brown","green","olive","red","pink"]
-            .map(c => <option key={c} value={c}>{c}</option>)
-          }
-        </select>
+          <select className="control" value={col} onChange={(e) => setCol(e.target.value)}>
+            <option value="all">All colors</option>
+            {["black","white","gray","navy","blue","light blue","dark blue","beige","brown","green","olive","red","pink"]
+              .map(c => <option key={c} value={c}>{c}</option>)
+            }
+          </select>
 
-        <select value={sort} onChange={(e) => setSort(e.target.value)}>
-          <option value="newest">Newest</option>
-          <option value="wornDesc">Most worn</option>
-          <option value="wornAsc">Least worn</option>
-          <option value="titleAsc">Title A → Z</option>
-        </select>
+          <select className="control" value={sort} onChange={(e) => setSort(e.target.value)}>
+            <option value="newest">Newest</option>
+            <option value="wornDesc">Most worn</option>
+            <option value="wornAsc">Least worn</option>
+            <option value="titleAsc">Title A → Z</option>
+          </select>
 
-        <button
-          className="btn btnGhost"
-          onClick={() => { setQ(''); setCat('all'); setCol('all'); setSort('newest') }}
-        >
-          清除
-        </button>
+          <button
+            className="btn btnGhost"
+            onClick={() => { setQ(''); setCat('all'); setCol('all'); setSort('newest') }}
+          >
+            清除
+          </button>
 
-        <div style={{ opacity: 0.7, fontSize: 14 }}>
-          顯示 {visibleItems.length} / {items.length}
+          <div className="filterCount">
+            顯示 {visibleItems.length} / {items.length}
+          </div>
         </div>
       </div>
+
 
       {error && (
         <div style={{ margin: '10px 0', color: '#b00020' }}>

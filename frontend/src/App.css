@@ -459,3 +459,79 @@
   border-color: #8b2e2e;
   color: white;
 }
+
+/* ========= Filter Bar (Closet) ========= */
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 10px;
+}
+
+.filterRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-left: auto; /* 右側靠右 */
+}
+
+.control {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(74, 44, 29, 0.18);
+  background: #fff;
+  color: #4a2c1d;
+  outline: none;
+  font-size: 14px;
+  line-height: 40px;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+/* 讓 input 撐滿左側 */
+.filterBar > .control {
+  flex: 1;
+  min-width: 260px;
+}
+
+/* select 更像你的按鈕 */
+.control:hover {
+  border-color: rgba(74, 44, 29, 0.35);
+}
+
+.control:focus {
+  border-color: rgba(74, 44, 29, 0.55);
+  box-shadow: 0 0 0 4px rgba(74, 44, 29, 0.12);
+}
+
+/* count 變成小 badge 文案 */
+.filterCount {
+  padding: 0 10px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(74, 44, 29, 0.14);
+  background: rgba(74, 44, 29, 0.03);
+  color: rgba(74, 44, 29, 0.85);
+  font-size: 13px;
+}
+
+/* 手機版：上下排比較好看 */
+@media (max-width: 720px) {
+  .filterBar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filterRight {
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+  .filterBar > .control {
+    width: 100%;
+  }
+}
+.control::placeholder {
+  color: rgba(74, 44, 29, 0.45);
+}
