@@ -270,28 +270,23 @@ export default function MarketPage({ go, user }) {
       title="二手交易區"
       subtitle="正式版：資料從 Supabase 讀寫，上架/編輯/刪除/留言都會保存。"
     >
-      <div className="toolbar" style={{ gap: 10, flexWrap: 'wrap' }}>
-        <button className="btn btnGhost" onClick={() => go('home')}>← 回主畫面</button>
+      <div className="toolbar toolbarRow">
+        <button className="btn btnGhost" onClick={() => go('home')}>
+          ← 回主畫面
+        </button>
 
         <input
-          style={{ flex: 1, minWidth: 220 }}
+          className="control controlGrow"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="搜尋商品（title/tag/size）"
         />
 
-        <button className="btn btnGhost" onClick={fetchListings} disabled={loading || busy}>
+        <button className="btn btnGhost" onClick={() => {/* 你的重新整理/重抓 supabase */}}>
           重新整理
         </button>
 
-        <button
-          className="btn btnPrimary"
-          disabled={!user || busy}
-          onClick={() => {
-            setEditingId(null)
-            setModalOpen(true)
-          }}
-        >
+        <button className="btn btnPrimary" onClick={() => setModalOpen(true)}>
           ＋ 上架
         </button>
       </div>
