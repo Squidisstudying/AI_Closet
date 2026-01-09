@@ -241,108 +241,114 @@ export default function ClosetPage({ go, user }) {
   }
 
   return (
-    <Shell
-      go={go}
-      title="我的衣櫃"
-      subtitle="上傳衣服照片、分類、顏色分析、穿著次數。"
-    >
-      <div className="filterBar">
-        <input
-          className="control"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="搜尋衣服名稱（例如：skirt）"
-        />
+  <Shell
+    go={go}
+    title="我的衣櫃"
+    subtitle="上傳衣服照片、分類、顏色分析、穿著次數。"
+  >
+    {/* ✅ 上方主工具列：回首頁 + 新增 */}
+    <div className="toolbar toolbarRow">
+      <button className="btn btnGhost" onClick={() => go('home')}>
+        ← 回主畫面
+      </button>
 
-        <div className="filterRight">
-          <select className="control" value={cat} onChange={(e) => setCat(e.target.value)}>
-            <option value="all">All categories</option>
-            {CATEGORY_OPTIONS.map(opt => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
+      <div className="spacer" />
 
-          <select className="control" value={col} onChange={(e) => setCol(e.target.value)}>
-            <option value="all">All colors</option>
-            {["black","white","gray","navy","blue","light blue","dark blue","beige","brown","green","olive","red","pink"]
-              .map(c => <option key={c} value={c}>{c}</option>)
-            }
-          </select>
+      <button className="btn btnPrimary" onClick={() => setAddingOpen(true)}>
+        ＋ 新增
+      </button>
+    </div>
 
-          <select className="control" value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option value="newest">Newest</option>
-            <option value="wornDesc">Most worn</option>
-            <option value="wornAsc">Least worn</option>
-            <option value="titleAsc">Title A → Z</option>
-          </select>
+    {/* ✅ 篩選列 */}
+    <div className="filterBar">
+      <input
+        className="control controlGrow"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="搜尋衣服名稱（例如：skirt）"
+      />
 
-          <button
-            className="btn btnGhost"
-            onClick={() => { setQ(''); setCat('all'); setCol('all'); setSort('newest') }}
-          >
-            清除
-          </button>
-
-          <div className="filterCount">
-            顯示 {visibleItems.length} / {items.length}
-          </div>
-        </div>
-      </div>
-
-      <div className="toolbar">
-        <button className="btn btnGhost" onClick={() => go('home')}>← 回主畫面</button>
-      </div>
-
-      {error && (
-        <div style={{ margin: '10px 0', color: '#b00020' }}>
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div style={{ opacity: 0.7 }}>讀取中...</div>
-      ) : (
-        <div className="grid">
-          <AddCard onClick={() => setAddingOpen(true)} />
-
-          {visibleItems.map((it) => (
-            <ClosetCard
-              key={it.id}
-              item={it}
-              busy={busy}
-              onEdit={() => setEditingItem(it)}
-              onDelete={() => deleteCloth(it.id)}
-              onWorn={() => wornPlusOne(it)}
-            />
+      <div className="filterRight">
+        <select className="control" value={cat} onChange={(e) => setCat(e.target.value)}>
+          <option value="all">All categories</option>
+          {CATEGORY_OPTIONS.map(opt => (
+            <option key={opt} value={opt}>{opt}</option>
           ))}
+        </select>
 
+        <select className="control" value={col} onChange={(e) => setCol(e.target.value)}>
+          <option value="all">All colors</option>
+          {COLOR_OPTIONS.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+
+        <select className="control" value={sort} onChange={(e) => setSort(e.target.value)}>
+          <option value="newest">Newest</option>
+          <option value="wornDesc">Most worn</option>
+          <option value="wornAsc">Least worn</option>
+          <option value="titleAsc">Title A → Z</option>
+        </select>
+
+        <button
+          className="btn btnGhost"
+          onClick={() => { setQ(''); setCat('all'); setCol('all'); setSort('newest') }}
+        >
+          清除
+        </button>
+
+        <div className="filterCount">
+          顯示 {visibleItems.length} / {items.length}
         </div>
-      )}
+      </div>
+    </div>
 
-      {addingOpen && (
-        <ClosetModal
-          mode="add"
-          onClose={() => setAddingOpen(false)}
-          onSubmit={async (data) => {
-            await addCloth(data)
-            setAddingOpen(false)
-          }}
-        />
-      )}
+    {/* 原本的 error / loading / grid / modal 全部照舊 */}
+    {error && <div style={{ margin: '10px 0', color: '#b00020' }}>{error}</div>}
 
-      {editingItem && (
-        <ClosetModal
-          mode="edit"
-          initial={editingItem}
-          onClose={() => setEditingItem(null)}
-          onSubmit={async (data) => {
-            await updateCloth(editingItem.id, data)
-            setEditingItem(null)
-          }}
-        />
-      )}
-    </Shell>
-  )
+    {loading ? (
+      <div style={{ opacity: 0.7 }}>讀取中...</div>
+    ) : (
+      <div className="grid">
+        <AddCard onClick={() => setAddingOpen(true)} />
+        {visibleItems.map((it) => (
+          <ClosetCard
+            key={it.id}
+            item={it}
+            busy={busy}
+            onEdit={() => setEditingItem(it)}
+            onDelete={() => deleteCloth(it.id)}
+            onWorn={() => wornPlusOne(it)}
+          />
+        ))}
+      </div>
+    )}
+
+    {addingOpen && (
+      <ClosetModal
+        mode="add"
+        onClose={() => setAddingOpen(false)}
+        onSubmit={async (data) => {
+          await addCloth(data)
+          setAddingOpen(false)
+        }}
+      />
+    )}
+
+    {editingItem && (
+      <ClosetModal
+        mode="edit"
+        initial={editingItem}
+        onClose={() => setEditingItem(null)}
+        onSubmit={async (data) => {
+          await updateCloth(editingItem.id, data)
+          setEditingItem(null)
+        }}
+      />
+    )}
+  </Shell>
+)
+
 }
 
 function ClosetCard({ item, busy, onEdit, onDelete, onWorn }) {
@@ -446,8 +452,13 @@ function ClosetModal({ mode, initial, onClose, onSubmit }) {
 
             <div className="field">
               <label>顏色</label>
-              <input value={color} onChange={(e) => setColor(e.target.value)} placeholder="例如：white / brown" />
+              <select value={color} onChange={(e) => setColor(e.target.value)}>
+                {COLOR_OPTIONS.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
             </div>
+
 
             <div className="field">
               <label>顏色</label>

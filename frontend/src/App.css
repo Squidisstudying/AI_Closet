@@ -191,7 +191,7 @@
   margin: 16px 0 16px 0;
   flex-wrap: wrap;
 }
-
+.spacer{ flex:1; }
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -461,11 +461,17 @@
 }
 
 /* ========= Filter Bar (Closet) ========= */
-.filterBar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 14px 0 10px;
+.filterBar{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-top: 12px;
+
+  padding: 12px;
+  border: 1px solid rgba(74, 44, 29, 0.15);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.7);
 }
 
 .filterRight {
@@ -534,4 +540,8 @@
 }
 .control::placeholder {
   color: rgba(74, 44, 29, 0.45);
+}
+.controlGrow{
+  flex: 1;
+  min-width: 220px;
 }
