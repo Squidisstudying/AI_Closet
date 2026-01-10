@@ -67,7 +67,7 @@ export default function App() {
           <div className="heroBox">
             <h1 className="heroTitle">Dress smarter.</h1>
             <p className="heroSubtitle">
-              管理衣櫃、每日穿搭推薦、把很少穿的衣服快速整理成二手上架清單。
+              管理衣櫃、購物建議、把很少穿的衣服快速整理成二手上架清單。
             </p>
 
             <div className="heroActions">
@@ -75,7 +75,7 @@ export default function App() {
                 進入我的衣櫃
               </button>
               <button className="heroCardBtn" onClick={() => setPage('today')}>
-                看今日推薦
+                買衣服建議
               </button>
               <button className="heroCardBtn" onClick={() => setPage('market')}>
                 前往二手交易
@@ -105,7 +105,7 @@ function TopNav({ variant, go }) {
 
       <div className="navMenu">
         <button className="navBtn" onClick={() => go('closet')}>我的衣櫃</button>
-        <button className="navBtn" onClick={() => go('today')}>今日穿搭推薦</button>
+        <button className="navBtn" onClick={() => go('today')}>買衣服建議</button>
         <button className="navBtn" onClick={() => go('market')}>二手交易區</button>
       </div>
     </div>
