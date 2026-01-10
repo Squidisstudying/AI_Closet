@@ -5,35 +5,16 @@ import Shell from './Shell.jsx'
 const BUCKET = 'images'
 
 const CATEGORY_OPTIONS = [
-  "t-shirt",
-  "shirt",
-  "hoodie",
-  "sweater",
-  "jacket",
-  "jeans",
-  "wide pants",
-  "pants", 
-  "dress",
-  "shorts",
-  "skirt",
-  "other"
-];
+  "blouse","cardigan","coat","dress","hoodie","jacket","jeans","leggings",
+  "pants","shirt","shorts","skirt","sweater","t-shirt","top","vest"
+]
 
 const COLOR_OPTIONS = [
-  "black",
-  "white",
-  "gray",
-  "navy",
-  "blue",
-  "light blue",
-  "dark blue",
-  "beige",
-  "brown",
-  "green",
-  "olive",
-  "red",
-  "pink",
+  "beige","black","blue","brown","burgundy","cream","gold","gray","green","grey",
+  "ivory","khaki","maroon","navy","olive","orange","pink","purple","red","rose",
+  "silver","tan","white","yellow"
 ]
+
 
 
 // 把 DB row 轉成你卡片想用的格式
@@ -92,8 +73,20 @@ export default function ClosetPage({ go, user }) {
         !keyword ||
         (it.title || '').toLowerCase().includes(keyword)
 
-      const okCat = cat === 'all' || it.category === cat
-      const okCol = col === 'all' || it.color === col
+      const okCat =
+        cat === 'all'
+          ? true
+          : cat === '__legacy'
+            ? !CATEGORY_OPTIONS.includes(it.category)
+            : it.category === cat
+
+      const okCol =
+        col === 'all'
+          ? true
+          : col === '__legacy'
+            ? !COLOR_OPTIONS.includes(it.color)
+            : it.color === col
+
 
       return okQ && okCat && okCol
     })
@@ -299,16 +292,15 @@ export default function ClosetPage({ go, user }) {
       <div className="filterRight">
         <select className="control" value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="all">All categories</option>
-          {CATEGORY_OPTIONS.map(opt => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
+          {CATEGORY_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          <option value="__legacy">Legacy/Other</option>
         </select>
 
         <select className="control" value={col} onChange={(e) => setCol(e.target.value)}>
           <option value="all">All colors</option>
-          {COLOR_OPTIONS.map(c => (
-            <option key={c} value={c}>{c}</option>
+          {COLOR_OPTIONS.map(c => ( <option key={c} value={c}>{c}</option>
           ))}
+          <option value="__legacy">Legacy/Other</option>
         </select>
 
         <select className="control" value={sort} onChange={(e) => setSort(e.target.value)}>
