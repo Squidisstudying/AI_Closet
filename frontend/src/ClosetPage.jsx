@@ -17,6 +17,54 @@ const COLOR_OPTIONS = [
   "rust", "sea green", "tan", "teal", "turquoise blue", "white", "yellow"
 ]
 
+function normalizeCategory(raw) {
+  const s = (raw || '').trim().toLowerCase()
+
+  const map = {
+    // 舊版本常見
+    't-shirt': 'tshirts',
+    'tshirts': 'tshirts',
+    'shirt': 'shirts',
+    'hoodie': 'sweatshirts',
+    'sweater': 'sweaters',
+    'jacket': 'jackets',
+    'jeans': 'jeans',
+    'wide pants': 'trousers',
+    'pants': 'trousers',
+    'shorts': 'shorts',
+    'skirt': 'skirts',
+    'dress': 'tunics',
+    'other': 'other',
+  }
+
+  const v = map[s] || s
+  return CATEGORY_OPTIONS.includes(v) ? v : 'other'
+}
+
+function normalizeColor(raw) {
+  const s = (raw || '').trim().toLowerCase()
+
+  const map = {
+    // 你之前說的對應
+    'dark blue': 'navy blue',
+    'navy': 'navy blue',
+
+    // 舊版本常見
+    'gray': 'grey',
+    'light blue': 'turquoise blue',
+  }
+
+  const v = map[s] || s
+  return COLOR_OPTIONS.includes(v) ? v : 'multi'
+}
+
+function prettyLabel(s) {
+  // 用於 UI 顯示：第一個字母大寫
+  return (s || '')
+    .split(' ')
+    .map(w => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ')
+}
 
 
 // 把 DB row 轉成你卡片想用的格式
@@ -24,29 +72,40 @@ function rowToItem(row) {
   return {
     id: row.id,
     title: row.title,
-    category: row.category,
-    color: row.color,
+    category: normalizeCategory(row.category),
+    color: normalizeColor(row.color),
     worn: row.worn,
     image: row.image_url || '',
     image_path: row.image_path || null,
-    created_at: row.created_at || null, // ✅ for sorting
+    created_at: row.created_at || null, // for sorting
   }
 }
 
 
-// 上傳衣櫃圖片到 Storage，回傳 publicUrl + path（path 會存 DB，之後刪檔用）
-async function uploadClosetImage(file, userId) {
-  const ext = file.name.split('.').pop()
-  const path = `closet/${userId}/${crypto.randomUUID()}.${ext}`
-
-  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
-    upsert: false,
+// 上傳衣服圖片到 Supabase Storage
+async function listToMarket(it) {
+  const image_url = it.image_url ?? it.image ?? ''
+  
+  const { error } = await supabase.from('market_listings').insert({
+    seller_id: user.id,
+    title: it.title ?? '未命名商品',
+    price: 300,              
+    size: 'M',               
+    condition: '9成新',       
+    tag: '衣櫃推薦',          
+    image_url,
+    status: 'available',
   })
-  if (upErr) throw upErr
 
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
-  return { publicUrl: data.publicUrl, path }
+  if (error) {
+    alert('上架失敗：' + error.message)
+    return
+  }
+
+  alert('已上架到交易區！')
+  go('market')
 }
+
 // main closetpage
 export default function ClosetPage({ go, user }) {
   const [items, setItems] = useState([])
@@ -151,8 +210,8 @@ export default function ClosetPage({ go, user }) {
         .insert({
           user_id: user.id,
           title: form.title || '未命名衣服',
-          category: form.category,
-          color: form.color,
+          category: normalizeCategory(form.category),
+          color: normalizeColor(form.color),
           worn: form.worn ?? 0,
           image_url,
           image_path,
@@ -177,8 +236,8 @@ export default function ClosetPage({ go, user }) {
     try {
       const patch = {
         title: form.title || '未命名衣服',
-        category: form.category,
-        color: form.color,
+        category: normalizeCategory(form.category),
+        color: normalizeColor(form.color),
         worn: form.worn ?? 0,
       }
 
@@ -241,9 +300,9 @@ export default function ClosetPage({ go, user }) {
     const { error } = await supabase.from('market_listings').insert({
       seller_id: user.id,
       title: it.title ?? '未命名商品',
-      price: 300,              // 你可以改成你們預設價
-      size: 'M',               // 預設
-      condition: '9成新',       // 預設
+      price: 300,              // 預設價
+      size: 'M',               // 預設 size is M
+      condition: '9成新',       // 預設 9成新
       tag: '衣櫃推薦',          // 讓交易區知道是推薦來的
       image_url,
       status: 'active',
@@ -269,7 +328,7 @@ export default function ClosetPage({ go, user }) {
     title="我的衣櫃"
     subtitle="上傳衣服照片、分類、顏色分析、穿著次數。"
   >
-    {/* ✅ 上方主工具列：回首頁 + 新增 */}
+    {/* 上方主工具列：回首頁 + 新增 */}
     <div className="toolbar toolbarRow">
       <button className="btn btnGhost" onClick={() => go('home')}>
         ← 回主畫面
@@ -282,7 +341,7 @@ export default function ClosetPage({ go, user }) {
       </button>
     </div>
 
-    {/* ✅ 篩選列 */}
+    {/* 篩選列 */}
     <div className="filterBar">
       <input
         className="control controlGrow"
@@ -294,14 +353,19 @@ export default function ClosetPage({ go, user }) {
       <div className="filterRight">
         <select className="control" value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="all">All categories</option>
-          {CATEGORY_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          {CATEGORY_OPTIONS.map(opt => (
+            <option key={opt} value={opt}>{prettyLabel(opt)}</option>
+          ))}
+
           <option value="__legacy">Legacy/Other</option>
         </select>
 
         <select className="control" value={col} onChange={(e) => setCol(e.target.value)}>
           <option value="all">All colors</option>
-          {COLOR_OPTIONS.map(c => ( <option key={c} value={c}>{c}</option>
+          {COLOR_OPTIONS.map(c => (
+            <option key={c} value={c}>{prettyLabel(c)}</option>
           ))}
+
           <option value="__legacy">Legacy/Other</option>
         </select>
 

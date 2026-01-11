@@ -1,0 +1,17 @@
+# === 系統垃圾 ===
+.DS_Store
+Thumbs.db
+
+# === 前端地雷 (絕對不要推) ===
+node_modules/
+dist/
+.env
+
+# === 後端地雷 (絕對不要推) ===
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# === 其他 ===
+.vscode/

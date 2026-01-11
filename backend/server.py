@@ -1,63 +1,171 @@
 import io
-from fastapi import FastAPI, File, UploadFile
+import requests 
+import torch
+import torch.nn as nn
+from torchvision import models, transforms
+from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from transformers import CLIPProcessor, CLIPModel
 import torch.nn.functional as F
-import torch
+import json
+import os
+import sys
 
 app = FastAPI()
 
-# --- 1. 設定 CORS (這一步超重要) ---
-# 因為你的 React 在 localhost:5173，Python 在 localhost:8000
-# 如果不加這個，瀏覽器會因為安全理由擋住連線
+# --- 設定 CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允許所有來源 (開發階段方便)，上線可改成 ["http://localhost:5173"]
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- 2. 載入模型 (伺服器啟動時只載入一次) ---
-print("正在載入 AI 模型...請稍候")
-MODEL_NAME = "openai/clip-vit-base-patch32"
-model = CLIPModel.from_pretrained(MODEL_NAME)
-processor = CLIPProcessor.from_pretrained(MODEL_NAME)
-print("模型載入完成！")
+# ==========================================
+# 1. 定義模型架構 (雙頭龍)
+# ==========================================
+class MultiHeadResNet(nn.Module):
+    def __init__(self, num_cats, num_cols):
+        super().__init__()
+        self.backbone = models.resnet18(pretrained=False)
+        num_features = self.backbone.fc.in_features
+        self.backbone.fc = nn.Identity()
+        self.fc_cat = nn.Linear(num_features, num_cats)
+        self.fc_color = nn.Linear(num_features, num_cols)
 
-def calculate_similarity(image1_bytes, image2_bytes):
-    try:
-        # 直接從記憶體讀取圖片，不需要存成檔案
-        img1 = Image.open(io.BytesIO(image1_bytes)).convert("RGB")
-        img2 = Image.open(io.BytesIO(image2_bytes)).convert("RGB")
+    def forward(self, x):
+        features = self.backbone(x)
+        return self.fc_cat(features), self.fc_color(features)
+
+# ==========================================
+# 2. 從 JSON 加載類別和顏色映射
+# ==========================================
+def load_class_mappings():
+    """從 JSON 文件加載類別映射"""
+    json_path = os.path.join(os.path.dirname(__file__), "class_mapping.json")
+    
+    if not os.path.exists(json_path):
+        print(f"❌ class_mapping.json 不存在: {json_path}")
+        print("請先運行 train_model.py 生成映射文件")
+        sys.exit(1)
+    
+    with open(json_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    # 轉換為字典形式 (JSON 会把整数鍵轉成字符串)
+    cat_map = {int(k): v for k, v in data['cat_map'].items()}
+    color_map = {int(k): v for k, v in data['color_map'].items()}
+    
+    return cat_map, color_map
+
+# 加載映射
+print("正在加載類別映射...")
+cat_map, color_map = load_class_mappings()
+CLASS_NAMES = [cat_map[i] for i in sorted(cat_map.keys())]
+COLOR_NAMES = [color_map[i] for i in sorted(color_map.keys())]
+NUM_CATS = len(CLASS_NAMES)
+NUM_COLORS = len(COLOR_NAMES)
+print(f"✅ 已加載 {NUM_CATS} 種服裝類別和 {NUM_COLORS} 種顏色")
+
+# 載入分類模型
+classifier = None
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+try:
+    print(f"正在載入分類模型... (類別: {NUM_CATS})")
+    model = MultiHeadResNet(num_cats=NUM_CATS, num_cols=NUM_COLORS)
+    # 這裡記得確認 Model_Weights.pth 確實在 backend 資料夾裡
+    state_dict = torch.load("Model_Weights.pth", map_location=device)
+    model.load_state_dict(state_dict)
+    model.to(device)
+    model.eval()
+    classifier = model
+    print("✅ Model_Weights.pth 載入成功！")
+except Exception as e:
+    print(f"❌ 分類模型載入失敗: {e}")
+    print("💡 請確認 'Model_Weights.pth' 是否已複製到 backend 資料夾中")
+
+# 預處理
+transform_classify = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+])
+
+# 載入 CLIP 模型
+print("正在載入 CLIP 模型...")
+CLIP_MODEL_NAME = "openai/clip-vit-base-patch32"
+clip_model = CLIPModel.from_pretrained(CLIP_MODEL_NAME)
+clip_processor = CLIPProcessor.from_pretrained(CLIP_MODEL_NAME)
+print("✅ CLIP 模型載入成功！")
+
+# ==========================================
+# 3. API 區域
+# ==========================================
+
+@app.get("/")
+def home():
+    return {"message": "AI Backend is Running!"}
+
+# 功能一：辨識衣服種類與顏色
+@app.post("/predict_type")
+async def predict_type(file: UploadFile = File(...)):
+    if classifier is None:
+        return {"category": "unknown", "color": "unknown", "error": "Model not loaded"}
+    
+    image_data = await file.read()
+    image = Image.open(io.BytesIO(image_data)).convert("RGB")
+    
+    # 預處理
+    img_tensor = transform_classify(image).unsqueeze(0).to(device)
+    
+    with torch.no_grad():
+        cat_logits, col_logits = classifier(img_tensor)
         
-        inputs1 = processor(images=img1, return_tensors="pt")
-        inputs2 = processor(images=img2, return_tensors="pt")
+        _, cat_idx = torch.max(cat_logits, 1)
+        _, col_idx = torch.max(col_logits, 1)
+        
+        # 防止 index out of range
+        pred_cat = CLASS_NAMES[cat_idx.item()] if cat_idx.item() < len(CLASS_NAMES) else "unknown"
+        pred_col = COLOR_NAMES[col_idx.item()] if col_idx.item() < len(COLOR_NAMES) else "unknown"
+
+    return {"category": pred_cat, "color": pred_col}
+
+# 🔥 功能二：直接接收網址進行比對
+@app.post("/compare_url")
+async def compare_url(file1: UploadFile = File(...), url2: str = Form(...)):
+    try:
+        # 1. 讀取使用者上傳的圖
+        img1_data = await file1.read()
+        img1 = Image.open(io.BytesIO(img1_data)).convert("RGB")
+        
+        # 2. 讓後端去下載衣櫃的圖 (解決 CORS 問題)
+        # print(f"正在下載圖片: {url2}") # 除錯用
+        headers = {'User-Agent': 'Mozilla/5.0'} # 偽裝成瀏覽器，避免被擋
+        resp = requests.get(url2, headers=headers, timeout=10)
+        
+        if resp.status_code != 200:
+            print(f"下載失敗: {resp.status_code} - {url2}")
+            return {"similarity": 0, "message": "Download failed"}
+            
+        img2 = Image.open(io.BytesIO(resp.content)).convert("RGB")
+        
+        # 3. CLIP 比對
+        inputs1 = clip_processor(images=img1, return_tensors="pt")
+        inputs2 = clip_processor(images=img2, return_tensors="pt")
         
         with torch.no_grad():
-            feat1 = model.get_image_features(**inputs1)
-            feat2 = model.get_image_features(**inputs2)
+            feat1 = clip_model.get_image_features(**inputs1)
+            feat2 = clip_model.get_image_features(**inputs2)
             
         feat1 = feat1 / feat1.norm(p=2, dim=-1, keepdim=True)
         feat2 = feat2 / feat2.norm(p=2, dim=-1, keepdim=True)
         
         score = F.cosine_similarity(feat1, feat2).item() * 100
-        return score
+        return {"similarity": score, "message": "success"}
+        
     except Exception as e:
-        print(f"Error: {e}")
-        return 0
-
-# --- 3. 建立 API 接口 ---
-@app.post("/compare")
-async def compare_images(file1: UploadFile = File(...), file2: UploadFile = File(...)):
-    # 讀取上傳的檔案內容
-    img1_data = await file1.read()
-    img2_data = await file2.read()
-    
-    score = calculate_similarity(img1_data, img2_data)
-    
-    return {"similarity": score, "message": "success"}
-
-# --- 啟動指令 (寫在註解裡備忘) ---
-# uvicorn server:app --reload
+        print(f"比對錯誤: {e}")
+        return {"similarity": 0, "message": str(e)}

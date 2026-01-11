@@ -2,36 +2,28 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient.js'
 
+// 引入頁面組件
 import MarketPage from './MarketPage.jsx'
 import ClosetPage from './ClosetPage.jsx'
-import TodayPage from './TodayPage.jsx'
+import TodayPage from './TodayPage.jsx' 
 import AuthTest from './AuthTest.jsx'
 import Shell from './Shell.jsx'
 
 const CATEGORY_OPTIONS = [
-  "t-shirt",
-  "shirt",
-  "hoodie",
-  "sweater",
-  "jacket",
-  "jeans",
-  "wide pants",
-  "pants", 
-  "dress",
-  "shorts",
-  "skirt",
-  "other"
-];
+  "capris", "jackets", "jeans", "leggings", "shirts", "shorts", "skirts", 
+  "sweaters", "sweatshirts", "track pants", "trousers", "tshirts", "tunics"
+]
 
 export default function App() {
+  // 預設回到首頁 ('home')
   const [page, setPage] = useState('home')
 
-  // ✅ 新增：登入狀態
+  // 登入狀態管理
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
-    // 1) 一進來先讀 session
+    // 1) 先讀 session
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user ?? null)
       setAuthLoading(false)
@@ -47,17 +39,18 @@ export default function App() {
     }
   }, [])
 
-  // ✅ 還在讀登入狀態
-  if (authLoading) return <div style={{ padding: 20 }}>Loading...</div>
+  // 載入中畫面
+  if (authLoading) return <div style={{ padding: 20, textAlign: 'center' }}>Loading...</div>
 
-  // ✅ 沒登入就先顯示登入畫面
+  // 沒登入就先顯示登入畫面
   if (!user) return <AuthTest onLogin={setUser} />
 
-  // ✅ 下面開始：完全保留你原本的 router / UI
+  // 路由切換邏輯
   if (page === 'closet') return <ClosetPage go={setPage} user={user} />
   if (page === 'today') return <TodayPage go={setPage} user={user} />
   if (page === 'market') return <MarketPage go={setPage} user={user} />
 
+  // 首頁畫面 (Home)
   return (
     <div className="home">
       <div className="homeInner">
@@ -67,7 +60,7 @@ export default function App() {
           <div className="heroBox">
             <h1 className="heroTitle">Dress smarter.</h1>
             <p className="heroSubtitle">
-              管理衣櫃、購物建議、把很少穿的衣服快速整理成二手上架清單。
+              管理衣櫃、購物建議、把不常穿的衣服一鍵上架二手交易。
             </p>
 
             <div className="heroActions">
@@ -82,7 +75,7 @@ export default function App() {
               </button>
             </div>
 
-            <p style={{ marginTop: 16, opacity: 0.7 }}>
+            <p style={{ marginTop: 16, opacity: 0.7, fontSize: '0.9rem' }}>
               已登入：{user.email}
             </p>
           </div>
@@ -92,6 +85,7 @@ export default function App() {
   )
 }
 
+// 導覽列組件
 function TopNav({ variant, go }) {
   const isLight = variant === 'light'
   return (
@@ -99,7 +93,7 @@ function TopNav({ variant, go }) {
       className={`navbar ${isLight ? 'navbarLight' : ''}`}
       style={{ color: isLight ? '#4a2c1d' : '#fff' }}
     >
-      <div className="brand" onClick={() => go('home')}>
+      <div className="brand" onClick={() => go('home')} style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '1.2rem' }}>
         My Style Closet
       </div>
 

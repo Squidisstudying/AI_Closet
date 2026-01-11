@@ -22,7 +22,7 @@ def infer_gender_from_categories(item_meta):
 
 
 # ----------------------------
-# 顏色抽取（沿用你的策略）
+# 顏色抽取
 # ----------------------------
 def extract_color(description, title):
     text = ((description or "") + " " + (title or "")).lower()

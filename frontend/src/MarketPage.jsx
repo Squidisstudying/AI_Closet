@@ -2,12 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabaseClient.js'
 import Shell from './Shell.jsx'
 
-// import AddListing from './AddListing.jsx' // 沒用到可先拿掉
 
-const BUCKET = 'images' // 若你有 Supabase Storage bucket（可先不建）
+const BUCKET = 'images' 
 
 async function uploadMarketImage(file, userId) {
-  // 需要：Supabase Storage 建 bucket：images，先設 public
   const ext = file.name.split('.').pop()
   const path = `market/${userId}/${crypto.randomUUID()}.${ext}`
 
@@ -27,8 +25,7 @@ export default function MarketPage({ go, user }) {
   // 新增/編輯 modal
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
-
-  // 詳情/留言（用 id，避免 selectedItem 變舊）
+  // 商品詳情 modal
   const [selectedId, setSelectedId] = useState(null)
   const selectedItem = useMemo(
     () => items.find((x) => x.id === selectedId) || null,
@@ -68,8 +65,8 @@ export default function MarketPage({ go, user }) {
       return
     }
 
-    // 映射成你前端想用的格式（image/seller）
-    const mapped = (data || []).map((r) => ({
+      // Map data to desired format
+      const mapped = (data || []).map((r) => ({
       id: r.id,
       title: r.title,
       price: r.price,
@@ -96,7 +93,7 @@ async function setStatus(id, status) {
       .from('market_listings')
       .update({ status })
       .eq('id', id)
-      .eq('seller_id', user.id) // ✅ 只能改自己的
+      .eq('seller_id', user.id) // 防止改到別人的
 
     if (error) throw error
 
@@ -157,7 +154,7 @@ async function setStatus(id, status) {
           image_url,
         })
         .eq('id', id)
-        .eq('seller_id', user.id) // ✅ 防止改到別人的
+        .eq('seller_id', user.id) // 防止改到別人的
 
       if (error) throw error
 
@@ -416,7 +413,7 @@ function ProductCard({ item, isMine, onOpen, onEdit, onDelete, onSetStatus }) {
         <div className="meta">
           <span>尺寸：{item.size}</span>
           <span>狀態：{item.condition}</span>
-          {/* ✅ 顯示目前上架狀態（available/reserved/sold/hidden） */}
+          {/* 顯示目前上架狀態（available/reserved/sold/hidden） */}
           <span>上架：{item.status || 'available'}</span>
         </div>
 
@@ -427,7 +424,7 @@ function ProductCard({ item, isMine, onOpen, onEdit, onDelete, onSetStatus }) {
           </button>
         </div>
 
-        {/* ✅ 只有自己的商品才顯示：狀態切換 */}
+        {/* 只有自己的商品才顯示：狀態切換 */}
         {isMine && (
           <div className="statusRow">
             <button
@@ -564,8 +561,8 @@ function ProductModal({ mode, initial, onClose, onSubmit }) {
               size,
               condition,
               tag,
-              imageUrl, // ✅ 永久 URL（或空）
-              file,     // ✅ 若有選檔，就交給父層上傳到 Storage
+              imageUrl, // 永久 URL（或空）
+              file,     // 若有選檔，就交給父層上傳到 Storage
             })}
           >
             {isEdit ? '儲存修改' : '確認上架'}
